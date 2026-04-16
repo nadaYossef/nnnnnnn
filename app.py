@@ -18,22 +18,39 @@ app_opens = st.number_input("App Opens per Day", 0, 1000)
 weekend_time = st.number_input("Weekend Screen Time", 0, 48)
 
 if st.button("Predict"):
-    # --- ADD THE CODE HERE ---
-    # Create a DataFrame with all 9 columns in the EXACT order from your notebook
-    input_df = pd.DataFrame([[
-        age, screen_time, social_media, gaming, 
-        work_study, sleep, notifications, app_opens, weekend_time
-    ]], columns=[
-        'age', 'daily_screen_time_hours', 'social_media_hours', 'gaming_hours', 
-        'work_study_hours', 'sleep_hours', 'notifications_per_day', 
-        'app_opens_per_day', 'weekend_screen_time'
-    ])
+    # 1. Calculate the 'Engineered Features' used in your notebook
+    total_screen_time = daily_screen_time_hours + weekend_screen_time
+    entertainment_load = social_media_hours + gaming_hours
+    social_ratio = social_media_hours / (daily_screen_time_hours + 1e-6)
+
+    # 2. Create the DataFrame with the EXACT names and ORDER from your training
+    # These 6 features were identified as the 'Selected features' in your notebook
+    input_data = [[
+        daily_screen_time_hours, 
+        social_media_hours, 
+        total_screen_time, 
+        weekend_screen_time, 
+        entertainment_load, 
+        social_ratio
+    ]]
     
-    # Scale the features
+    column_names = [
+        'daily_screen_time_hours', 
+        'social_media_hours', 
+        'total_screen_time', 
+        'weekend_screen_time', 
+        'entertainment_load', 
+        'social_ratio'
+    ]
+    
+    input_df = pd.DataFrame(input_data, columns=column_names)
+
+    # 3. Scale and Predict
     scaled_features = scaler.transform(input_df)
-    
-    # Make the prediction
     prediction = model.predict(scaled_features)
-    # -------------------------
     
-    st.write(f"Result: {'Addicted' if prediction[0] == 1 else 'Not Addicted'}")
+    # Display results
+    if prediction[0] == 1:
+        st.error("High Risk of Addiction")
+    else:
+        st.success("Low Risk of Addiction")
