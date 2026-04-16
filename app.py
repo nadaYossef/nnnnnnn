@@ -15,10 +15,9 @@ screen_time = st.slider("Daily Screen Time (Hours)", 0.0, 24.0, 5.0)
 notifications = st.number_input("Notifications per Day", 0, 1000)
 
 if st.button("Predict"):
-    # Preprocess inputs exactly like you did in the notebook
-    features = np.array([[age, screen_time, notifications]]) # Add other features here
-    scaled_features = scaler.transform(features)
-    
+    features = np.array([[age, screen_time, notifications, sleep_hours, social_media]])
+
+    scaled_features = scaler.transform(features)    
     prediction = model.predict(scaled_features)
     
     if prediction[0] == 1:
