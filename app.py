@@ -5,7 +5,9 @@ import joblib
 
 # --- 1. SETTINGS & ASSETS ---
 st.set_page_config(page_title="Smartphone Addiction Predictor", layout="centered")
-
+# In your notebook, after you define X_simple
+scaler_simple = StandardScaler()
+X_simple_scaled = scaler_simple.fit_transform(X_simple)
 @st.cache_resource
 def load_assets():
     # Make sure 'model.pkl' and 'scaler.pkl' are uploaded to your GitHub repo
