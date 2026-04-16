@@ -9,7 +9,7 @@ st.set_page_config(page_title="Smartphone Addiction Predictor", layout="centered
 @st.cache_resource
 def load_assets():
     # Ensure these files are in the same folder as app.py
-    model = joblib.load('model.pkl')
+    model = joblib.load('smartphone_model.pkl')
     scaler = joblib.load('scaler.pkl')
     return model, scaler
 
