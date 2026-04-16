@@ -3,7 +3,7 @@ import pandas as pd
 import joblib
 
 # 1. Load your saved assets
-model = joblib.load('model.pkl')
+model = joblib.load('smartphone_model.pkl')
 scaler = joblib.load('scaler.pkl')
 
 # 2. Collect ALL 9 inputs required by your model
