@@ -9,14 +9,14 @@ st.set_page_config(page_title="Addiction Diagnostic Tool", page_icon="📱", lay
 # 2. Load the Pre-trained Model
 @st.cache_resource
 def load_model():
-    # Make sure 'gbc_model.pkl' is in the same folder as this script
+    # Ensure 'gbc_model.pkl' is in the same folder as this script
     return joblib.load('gbc_model.pkl')
 
 model = load_model()
 
 # 3. Header
 st.title("📱 Smartphone Addiction Diagnostic Tool")
-st.write("Enter your daily habits below to calculate your risk probability.")
+st.write("Calculate your addiction risk probability based on your usage habits.")
 st.markdown("---")
 
 # 4. Input Sidebar
@@ -35,39 +35,43 @@ is_weekend = st.sidebar.checkbox("Is this a Weekend/Holiday?")
 st.sidebar.subheader("Demographics")
 gender = st.sidebar.selectbox("Gender", ["Female", "Male", "Other"])
 
-# 5. Main Logic & Prediction
+# 5. Prediction Logic
 if st.button("Generate My Risk Report"):
     
     # Pre-calculations to avoid division by zero
     safe_daily = daily_hours if daily_hours > 0 else 0.01
     safe_sleep = sleep_hours if sleep_hours > 0 else 0.01
 
-    # Mapping Gender to match your One-Hot Encoded training columns
-    g_male = 1 if gender == "Male" else 0
-    g_other = 1 if gender == "Other" else 0
+    # Define our known features in a dictionary
+    # The keys here MUST match the column names used during your model training
+    input_dict = {
+        'daily_screen_time_hours': float(daily_hours),
+        'social_media_hours': float(social_hours),
+        'sleep_hours': float(sleep_hours),
+        'weekend_screen_time': float(daily_hours * 1.3 if is_weekend else daily_hours),
+        'average_daily_screen_time': float(daily_hours),
+        'productivity_ratio': float((daily_hours - social_hours) / safe_daily),
+        'social_media_ratio': float(social_hours / safe_daily),
+        'gaming_ratio': float(gaming_hours / safe_daily),
+        'notifications_per_screen_hour': float(notifications / safe_daily),
+        'app_opens_per_screen_hour': float(app_opens / safe_daily),
+        'screen_time_sleep_ratio': float(daily_hours / safe_sleep),
+        'gender_Male': 1 if gender == "Male" else 0,
+        'gender_Other': 1 if gender == "Other" else 0,
+        'gender_Female': 1 if gender == "Female" else 0 # Just in case it's in the 16
+    }
 
-    # Building the 13-feature array in EXACT order of model.feature_names_in_
-    data_row = [
-        float(daily_hours),                                # 1. daily_screen_time_hours
-        float(social_hours),                               # 2. social_media_hours
-        float(sleep_hours),                                # 3. sleep_hours
-        float(daily_hours * 1.3 if is_weekend else daily_hours), # 4. weekend_screen_time
-        float(daily_hours),                                # 5. average_daily_screen_time
-        float((daily_hours - social_hours) / safe_daily),  # 6. productivity_ratio
-        float(social_hours / safe_daily),                  # 7. social_media_ratio
-        float(gaming_hours / safe_daily),                  # 8. gaming_ratio
-        float(notifications / safe_daily),                 # 9. notifications_per_screen_hour
-        float(app_opens / safe_daily),                     # 10. app_opens_per_screen_hour
-        float(daily_hours / safe_sleep),                   # 11. screen_time_sleep_ratio
-        int(g_male),                                       # 12. gender_Male
-        int(g_other)                                       # 13. gender_Other
-    ]
-
-    # Create DataFrame and ensure it matches the model's expected column names
+    # --- THE FIX: DYNAMIC COLUMN ALIGNMENT ---
+    # We create a dataframe with the EXACT 16 columns the model expects
+    # We fill it by looking up the keys in our dictionary. If a key is missing, it puts 0.
     try:
-        input_df = pd.DataFrame([data_row], columns=model.feature_names_in_)
+        input_df = pd.DataFrame(columns=model.feature_names_in_)
+        input_df.loc[0] = [input_dict.get(col, 0) for col in model.feature_names_in_]
         
-        # Get Probability
+        # Ensure all data is numeric for the model
+        input_df = input_df.apply(pd.to_numeric)
+
+        # Get Probability (Class 1 is Addicted)
         prob_percent = model.predict_proba(input_df)[0][1] * 100
 
         # 6. Displaying Results
@@ -85,15 +89,18 @@ if st.button("Generate My Risk Report"):
         with col2:
             st.metric("Probability", f"{prob_percent:.1f}%")
 
-        # Short Feedback
         st.markdown("---")
-        if prob_percent > 70:
-            st.info("💡 **Tip:** Try disabling non-essential notifications to reduce app opens.")
-        elif prob_percent > 35:
-            st.info("💡 **Tip:** Set a 30-minute timer for your most-used social media apps.")
+        # Simple Logic-based Recommendations
+        if prob_percent > 60:
+            st.info("💡 **Recommendation:** Your probability is high. Try using 'Grayscale mode' to make your phone less stimulating.")
+        elif prob_percent > 30:
+            st.info("💡 **Recommendation:** Consider setting a daily limit for Social Media apps.")
         else:
-            st.success("✨ Your habits look balanced!")
+            st.success("✨ Your usage patterns appear healthy and balanced!")
 
     except Exception as e:
-        st.error(f"Error processing data: {e}")
-        st.write("Debug info: Expected 13 columns, got", len(data_row))
+        st.error(f"Prediction Error: {e}")
+        st.write("Missing features found in model:", [c for c in model.feature_names_in_ if c not in input_dict])
+
+else:
+    st.info("Please adjust your metrics and click the button above.")
