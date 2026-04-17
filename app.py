@@ -16,12 +16,19 @@ def load_assets():
 model = load_assets()
 
 # --- CUSTOM CSS FOR "INTELLIGENT" FEEL ---
+# --- CUSTOM CSS FOR "INTELLIGENT" FEEL ---
 st.markdown("""
     <style>
     .main { background-color: #f5f7f9; }
-    .stMetric { background-color: #ffffff; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    /* This targets the metric containers in Streamlit */
+    [data-testid="stMetric"] { 
+        background-color: #ffffff; 
+        padding: 15px; 
+        border-radius: 10px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
+    }
     </style>
-    """, unsafe_content_type=True)
+    """, unsafe_allow_html=True) # Changed from unsafe_content_type to unsafe_allow_html
 
 # --- SIDEBAR: INTUITIVE INPUTS ---
 with st.sidebar:
