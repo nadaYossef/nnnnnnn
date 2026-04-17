@@ -1,128 +1,80 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import joblib
-import plotly.express as px
-import plotly.graph_objects as ob
+import numpy as np
+import shap
+import matplotlib.pyplot as plt
 
-# --- CONFIG & ASSETS ---
-st.set_page_config(page_title="Zenith AI: Digital Wellness", page_icon="🧠", layout="wide")
+# 1. Load the pre-trained Gradient Boosting model
+model = joblib.load('gbc_model.pkl')
 
-@st.cache_resource
-def load_assets():
-    model = joblib.load('smartphone_model.pkl')
-    return model
+st.title("📱 Smartphone Addiction Diagnostic Tool")
+st.write("Enter your usage details to see your addiction risk level and personalized feedback.")
 
-model = load_assets()
+# 2. User Input Sidebar
+st.sidebar.header("Usage Metrics")
+daily_hours = st.sidebar.slider("Daily Screen Time (Hours)", 0.0, 24.0, 5.0)
+social_hours = st.sidebar.slider("Social Media (Hours)", 0.0, 24.0, 2.0)
+sleep_hours = st.sidebar.slider("Sleep Hours", 0.0, 12.0, 7.0)
+notifications = st.sidebar.number_input("Notifications per Day", 0, 1000, 50)
+app_opens = st.sidebar.number_input("App Opens per Day", 0, 500, 30)
 
-# --- CUSTOM CSS FOR "INTELLIGENT" FEEL ---
-# --- CUSTOM CSS FOR "INTELLIGENT" FEEL ---
-st.markdown("""
-    <style>
-    .main { background-color: #f5f7f9; }
-    /* This targets the metric containers in Streamlit */
-    [data-testid="stMetric"] { 
-        background-color: #ffffff; 
-        padding: 15px; 
-        border-radius: 10px; 
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05); 
-    }
-    </style>
-    """, unsafe_allow_html=True) # Changed from unsafe_content_type to unsafe_allow_html
+# Derived Features (Ensure these match your training columns)
+# Note: Adjust these calculation logic to match your 'model-and-eda.ipynb' feature engineering
+avg_daily = daily_hours # Simplified for example
+screen_sleep_ratio = daily_hours / (sleep_hours + 0.1)
 
-# --- SIDEBAR: INTUITIVE INPUTS ---
-with st.sidebar:
-    st.title("🧠 Usage Profile")
-    st.info("Input your typical weekly patterns for a deep neural analysis.")
+# Prepare input data
+input_data = pd.DataFrame([[
+    daily_hours, social_hours, sleep_hours, 
+    daily_hours * 1.2, # dummy for weekend_screen_time
+    avg_daily, 
+    (daily_hours - social_hours)/daily_hours if daily_hours > 0 else 0, # productivity_ratio
+    social_hours / daily_hours if daily_hours > 0 else 0, # social_media_ratio
+    0.1, # gaming_ratio
+    notifications / daily_hours if daily_hours > 0 else 0,
+    app_opens / daily_hours if daily_hours > 0 else 0,
+    screen_sleep_ratio,
+    1, 0, 0 # One-hot encoded gender (Male/Other/Female)
+]], columns=model.feature_names_in_)
+
+# 3. Prediction and Probability
+if st.button("Analyze My Usage"):
+    prediction = model.predict(input_data)[0]
+    probability = model.predict_proba(input_data)[0][1] * 100
     
-    daily = st.slider("Typical Weekday Screen Time", 1, 15, 6, help="Average hours on your phone Mon-Fri")
-    weekend = st.slider("Typical Weekend Screen Time", 1, 15, 8, help="Average hours on your phone Sat-Sun")
-    social = st.slider("Social Media Depth", 0.0, 10.0, 3.0)
-    gaming = st.slider("Gaming Frequency", 0.0, 10.0, 1.0)
-    
-    # Advanced context questions (even if not in model, they add to "intellect" feel)
-    st.divider()
-    purpose = st.selectbox("Primary Use Case", ["Work/Productivity", "Social/Entertainment", "Doomscrolling", "Utility"])
-
-# --- FEATURE ENGINEERING ---
-total_screen = daily + weekend
-soc_ratio = social / (daily + 1e-6)
-ent_load = social + gaming
-
-input_data = pd.DataFrame({
-    'daily_screen_time_hours': [daily],
-    'social_media_hours': [social],
-    'total_screen_time': [total_screen],
-    'weekend_screen_time': [weekend],
-    'entertainment_load': [ent_load],
-    'social_ratio': [soc_ratio]
-})
-
-# --- PREDICTION ENGINE ---
-prob = model.predict_proba(input_data)[0][1]
-
-# --- UI LAYOUT ---
-st.title("Digital Behavioral Analysis")
-st.write(f"Patient ID: #USR-{np.random.randint(1000, 9999)}")
-
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    # 1. Gauge Chart for "Intelligence" Visualization
-    fig = ob.Figure(ob.Indicator(
-        mode = "gauge+number",
-        value = prob * 100,
-        title = {'text': "Addiction Probability Index"},
-        gauge = {
-            'axis': {'range': [0, 100]},
-            'bar': {'color': "#1f77b4"},
-            'steps': [
-                {'range': [0, 30], 'color': "#e8f5e9"},
-                {'range': [30, 70], 'color': "#fff3e0"},
-                {'range': [70, 100], 'color': "#ffebee"}
-            ],
-            'threshold': {'line': {'color': "red", 'width': 4}, 'thickness': 0.75, 'value': 85}
-        }
-    ))
-    fig.update_layout(height=350)
-    st.plotly_chart(fig, use_container_width=True)
-
-with col2:
-    # 2. Persona Diagnosis
-    st.subheader("Diagnostic Persona")
-    if prob < 0.25:
-        st.success("### 🟢 Digital Minimalist")
-        st.write("Your digital footprint is lean. You likely use your device as a tool, not a crutch.")
-    elif prob < 0.55:
-        st.info("### 🟡 Functional User")
-        st.write("Usage is within normal parameters, though slight evening 'creep' may be present.")
-    elif prob < 0.85:
-        st.warning("### 🟠 Habitual Consumer")
-        st.write("Caution: Your dopamine pathways are heavily tied to social notifications.")
+    # Define Risk Level
+    if probability < 30:
+        level = "Low"
+        color = "green"
+    elif 30 <= probability < 70:
+        level = "Moderate"
+        color = "orange"
     else:
-        st.error("### 🔴 High Dependency")
-        st.write("Analysis indicates a strong neurological reliance on screen-based stimulation.")
+        level = "High"
+        color = "red"
 
-st.divider()
+    st.subheader(f"Risk Level: :{color}[{level}]")
+    st.metric("Addiction Probability", f"{probability:.1f}%")
 
-# 3. INTERPRETABILITY: Why did the AI say this?
-st.subheader("Neural Insight: Key Drivers")
-# We simulate feature importance for this specific user
-impact_data = pd.DataFrame({
-    'Metric': ['Daily Intensity', 'Social Load', 'Weekend Surge', 'Ent. Load'],
-    'Impact': [daily, social*1.5, (weekend-daily), ent_load]
-}).sort_values(by='Impact', ascending=False)
+    # 4. Explanation (Feedback)
+    st.write("### 🔍 Why did I get this score?")
+    # Using simple logic for explanation (or you can use SHAP here)
+    if daily_hours > 8:
+        st.warning("- Your screen time is significantly above the healthy average of 6-7 hours.")
+    if screen_sleep_ratio > 1.5:
+        st.warning("- Your phone use is heavily cutting into your recovery/sleep time.")
+    if notifications > 100:
+        st.warning("- High notification frequency suggests frequent dopamine spikes and focus fragmentation.")
 
-fig_bar = px.bar(impact_data, x='Impact', y='Metric', orientation='h', 
-             title="Factors Driving Your Score", color='Impact', color_continuous_scale='RdYlGn_r')
-st.plotly_chart(fig_bar, use_container_width=True)
-
-# 4. Pro-Active Coaching (The "Intelligent" Part)
-st.subheader("AI Recommendations")
-recs = []
-if soc_ratio > 0.5: recs.append("- **Social Satiety:** Your social media use is >50% of your total time. Try 'Greyscale Mode'.")
-if weekend > (daily + 2): recs.append("- **Weekend Bingeing:** Significant surge detected on weekends. Suggest a 'Digital Sabbath' on Sundays.")
-if prob > 0.7: recs.append("- **Biological Priority:** Model predicts sleep disruption. Lock device 90 mins before bed.")
-
-for r in recs:
-    st.info(r)
+    # 5. Recommended Steps
+    st.write("### 🚀 Recommended Steps")
+    if level == "High":
+        st.info("1. **Digital Detox**: Try a 24-hour break this weekend.\n"
+                "2. **Greyscale Mode**: Turn your screen to black and white to make apps less stimulating.\n"
+                "3. **Notification Cull**: Disable all non-human notifications (keep only calls/texts).")
+    elif level == "Moderate":
+        st.info("1. **App Timers**: Set a 30-min limit for your most-used social app.\n"
+                "2. **No-Phone Zones**: Keep the phone out of the bedroom.")
+    else:
+        st.success("Great job! Keep maintaining your balance. Consider a weekly 'Screen-Free Sunday' to stay on track.")
