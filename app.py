@@ -5,42 +5,47 @@ import numpy as np
 import shap
 import matplotlib.pyplot as plt
 
-# 1. Load the pre-trained Gradient Boosting model
-model = joblib.load('gbc_model.pkl')
+# --- Update this section in your app.py ---
 
-st.title("📱 Smartphone Addiction Diagnostic Tool")
-st.write("Enter your usage details to see your addiction risk level and personalized feedback.")
+# 1. Capture additional necessary inputs from sidebar
+gaming_hours = st.sidebar.slider("Gaming (Hours)", 0.0, 24.0, 0.5)
+is_weekend = st.sidebar.checkbox("Is today a weekend?")
 
-# 2. User Input Sidebar
-st.sidebar.header("Usage Metrics")
-daily_hours = st.sidebar.slider("Daily Screen Time (Hours)", 0.0, 24.0, 5.0)
-social_hours = st.sidebar.slider("Social Media (Hours)", 0.0, 24.0, 2.0)
-sleep_hours = st.sidebar.slider("Sleep Hours", 0.0, 12.0, 7.0)
-notifications = st.sidebar.number_input("Notifications per Day", 0, 1000, 50)
-app_opens = st.sidebar.number_input("App Opens per Day", 0, 500, 30)
+# 2. Logic to handle "Gender" correctly for the model
+gender = st.sidebar.selectbox("Gender", ["Female", "Male", "Other"])
+g_male = 1 if gender == "Male" else 0
+g_other = 1 if gender == "Other" else 0
+# (Female is the reference/0-baseline, so it doesn't need its own column)
 
-# Derived Features (Ensure these match your training columns)
-# Note: Adjust these calculation logic to match your 'model-and-eda.ipynb' feature engineering
-avg_daily = daily_hours # Simplified for example
-screen_sleep_ratio = daily_hours / (sleep_hours + 0.1)
-
-# Prepare input data
-input_data = pd.DataFrame([[
-    daily_hours, social_hours, sleep_hours, 
-    daily_hours * 1.2, # dummy for weekend_screen_time
-    avg_daily, 
-    (daily_hours - social_hours)/daily_hours if daily_hours > 0 else 0, # productivity_ratio
-    social_hours / daily_hours if daily_hours > 0 else 0, # social_media_ratio
-    0.1, # gaming_ratio
-    notifications / daily_hours if daily_hours > 0 else 0,
-    app_opens / daily_hours if daily_hours > 0 else 0,
-    screen_sleep_ratio,
-    1, 0, 0 # One-hot encoded gender (Male/Other/Female)
-]], columns=model.feature_names_in_)
-
-# 3. Prediction and Probability
+# 3. Data Preparation
 if st.button("Analyze My Usage"):
-    prediction = model.predict(input_data)[0]
+    # Calculate derived features to match your model's training logic
+    # Adding 0.01 to denominators to prevent division by zero errors
+    safe_daily = daily_hours if daily_hours > 0 else 0.01
+    
+    # Matching the 13 features found in gbc_model.pkl
+    data_row = [
+        daily_hours,                                # daily_screen_time_hours
+        social_hours,                               # social_media_hours
+        sleep_hours,                                # sleep_hours
+        daily_hours * 1.2 if is_weekend else daily_hours, # weekend_screen_time (estimate)
+        daily_hours,                                # average_daily_screen_time
+        (daily_hours - social_hours) / safe_daily,  # productivity_ratio
+        social_hours / safe_daily,                  # social_media_ratio
+        gaming_hours / safe_daily,                  # gaming_ratio
+        notifications / safe_daily,                 # notifications_per_screen_hour
+        app_opens / safe_daily,                     # app_opens_per_screen_hour
+        daily_hours / (sleep_hours + 0.1),          # screen_time_sleep_ratio
+        g_male,                                     # gender_Male
+        g_other                                     # gender_Other
+    ]
+
+    # Create DataFrame with the exact columns the model expects
+    input_df = pd.DataFrame([data_row], columns=model.feature_names_in_)
+    
+    # Now run prediction
+    prediction = model.predict(input_df)[0]
+    # ... rest of your prediction logic
     probability = model.predict_proba(input_data)[0][1] * 100
     
     # Define Risk Level
